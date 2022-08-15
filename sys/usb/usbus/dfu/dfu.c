@@ -46,12 +46,6 @@ static void _transfer_handler(usbus_t *usbus, usbus_handler_t *handler,
                               usbdev_ep_t *ep, usbus_event_transfer_t event);
 static void _init(usbus_t *usbus, usbus_handler_t *handler);
 
-#ifdef MODULE_RIOTBOOT_USB_DFU
-static void _reboot(void *arg);
-static ztimer_t scheduled_reboot = { .callback=_reboot };
-#define REBOOT_DELAY 2
-#endif
-
 #define DEFAULT_XFER_SIZE 64
 
 static size_t _gen_dfu_descriptor(usbus_t *usbus, void *arg)
@@ -87,14 +81,6 @@ static const usbus_descr_gen_funcs_t _dfu_descriptor = {
     },
     .len_type = USBUS_DESCR_LEN_FIXED,
 };
-
-#ifdef MODULE_RIOTBOOT_USB_DFU
-static void _reboot(void *arg)
-{
-    (void)arg;
-    pm_reboot();
-}
-#endif
 
 void usbus_dfu_init(usbus_t *usbus, usbus_dfu_device_t *handler, unsigned mode)
 {
@@ -159,7 +145,7 @@ static void _init(usbus_t *usbus, usbus_handler_t *handler)
 
 static int _dfu_class_control_req(usbus_t *usbus, usbus_dfu_device_t *dfu, usb_setup_t *pkt)
 {
-    static const usbopt_enable_t disable = USBOPT_DISABLE;
+    static usbopt_enable_t disable = USBOPT_DISABLE;
     DEBUG("DFU control request:%x\n", pkt->request);
     switch (pkt->request) {
         case DFU_DETACH:
@@ -221,10 +207,10 @@ static int _dfu_class_control_req(usbus_t *usbus, usbus_dfu_device_t *dfu, usb_s
                 DEBUG("GET STATUS GO TO IDLE\n");
             }
             else if (dfu->dfu_state == USB_DFU_STATE_DFU_MANIFEST_SYNC) {
-                /* Scheduled reboot, so we can answer back dfu-util before rebooting */
                 dfu->dfu_state = USB_DFU_STATE_DFU_DL_IDLE;
 #ifdef MODULE_RIOTBOOT_USB_DFU
-                ztimer_set(ZTIMER_SEC, &scheduled_reboot, 1);
+                reset_addr = FLASH_ADDR;
+                pm_reboot();
 #endif
             }
             memset(&buf, 0, sizeof(buf));
